@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DIN Format Tool</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: monospace;
+    background: #f5f5f5;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  /* ---------------- UI ---------------- */
+  .ui {
+    position: absolute;
+    left: 220px;
+    bottom: 180px;
+  }
+
+  .ui input {
+    display: block;
+    width: 240px;
+    margin-bottom: 8px;
+    padding: 6px;
+    font-size: 13px;
+    border: 1px solid #aaa;
+    background: #fff;
+    font-family: monospace;
+  }
+
+  /* ---------------- TABLE ---------------- */
+  #bottomUI {
+    position: absolute;
+    left: 20px;
+    bottom: 20px;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .table-header,
+  .table-row {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+  }
+
+  .table-header {
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+
+  .table-row {
+    font-size: 11px;
+    padding: 3px;
+    cursor: pointer;
+  }
+
+  .table-row:hover {
+    background: rgba(0,0,0,0.05);
+  }
+
+  .active {
+    background: rgba(0,0,0,0.08);
+    font-weight: bold;
+  }
+
+  /* ---------------- FOOTER ---------------- */
+  #footer {
+    position: fixed;
+    bottom: 10px;
+    right: 20px;
+    font-size: 11px;
+    color: rgba(0,0,0,0.5);
+    user-select: none;
+  }
+
+  #footer a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(0,0,0,0.3);
+  }
+
+  #footer a:hover {
+    color: rgba(0,0,0,0.8);
+  }
+
+  /* ---------------- MOBILE ---------------- */
+  @media (max-width: 768px) {
+    body {
+      overflow: auto;
+    }
+
+    .ui {
+      position: relative;
+      left: 0;
+      bottom: 0;
+      padding: 20px;
+    }
+
+    #bottomUI {
+      position: relative;
+      max-height: none;
+      margin: 20px;
+    }
+
+    #footer {
+      position: relative;
+      margin: 20px;
+      text-align: center;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<!-- UI -->
+<div class="ui">
+  <input id="cmInput">
+  <input id="mmInput">
+  <input id="inchInput">
+  <input id="pixelInput">
+</div>
+
+<!-- TABLE -->
+<div id="bottomUI">
+  <div class="table-header">
+    <div>Format</div>
+    <div>Size</div>
+  </div>
+  <div id="table"></div>
+</div>
+
+<!-- FOOTER -->
+<div id="footer">
+  DIN slider © 2026, CC-BY-NC, MIT License — 
+  <a href="https://www.moduldesign.online/" target="_blank">
+    Modul Design Services
+  </a>
+</div>
+
+<script>
+/* ---------------- DATA ---------------- */
+const formats = [
+  { name: "A0", w: 84.1, h: 118.9 },
+  { name: "A1", w: 59.4, h: 84.1 },
+  { name: "A2", w: 42, h: 59.4 },
+  { name: "A3", w: 29.7, h: 42 },
+  { name: "A4", w: 21, h: 29.7 },
+  { name: "A5", w: 14.8, h: 21 },
+  { name: "A6", w: 10.5, h: 14.8 },
+  { name: "A7", w: 7.4, h: 10.5 },
+  { name: "A8", w: 5.2, h: 7.4 },
+  { name: "A9", w: 3.7, h: 5.2 },
+  { name: "A10", w: 2.6, h: 3.7 }
+];
+
+formats.sort((a,b)=> (b.w*b.h)-(a.w*a.h));
+
+/* ---------------- CANVAS ---------------- */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+
+  canvas.style.width = window.innerWidth + "px";
+  canvas.style.height = window.innerHeight + "px";
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ---------------- STATE ---------------- */
+const DPI = 300;
+const spacing = 320;
+
+let scrollPos = 0;
+let targetScroll = 0;
+
+/* ---------------- UI ---------------- */
+const cmInput = document.getElementById("cmInput");
+const mmInput = document.getElementById("mmInput");
+const inchInput = document.getElementById("inchInput");
+const pixelInput = document.getElementById("pixelInput");
+
+const table = document.getElementById("table");
+
+/* ---------------- EVENTS ---------------- */
+canvas.addEventListener("wheel",(e)=>{
+  e.preventDefault();
+  targetScroll += e.deltaY;
+  targetScroll = Math.max(0, Math.min(targetScroll,(formats.length-1)*spacing));
+},{passive:false});
+
+canvas.addEventListener("mousedown",(e)=>{
+
+  formats.forEach((f,i)=>{
+    let x = canvas.clientWidth/2 + (i*spacing - scrollPos);
+    let y = 320;
+
+    let s = 4.2;
+    let w = f.w*s;
+    let h = f.h*s;
+
+    if(
+      e.clientX > x-w/2 &&
+      e.clientX < x+w/2 &&
+      e.clientY > y-h/2 &&
+      e.clientY < y+h/2
+    ){
+      targetScroll = i*spacing;
+    }
+  });
+
+  // TABLE CLICK
+  let tableY = 0;
+  formats.forEach((f,i)=>{
+    let y = 20 + i*18;
+
+    if(
+      e.clientX < 200 &&
+      e.clientY > y &&
+      e.clientY < y+15
+    ){
+      targetScroll = i*spacing;
+    }
+  });
+});
+
+/* ---------------- DRAW ---------------- */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  scrollPos += (targetScroll-scrollPos)*0.1;
+
+  let index = Math.round(scrollPos/spacing);
+  index = Math.max(0,Math.min(formats.length-1,index));
+
+  drawRuler(index);
+  drawFormats(index);
+  drawBigLabel(index);
+  drawTable(index);
+  updateUI(index);
+
+  requestAnimationFrame(draw);
+}
+
+/* ---------------- DRAW PARTS ---------------- */
+function drawRuler(index){
+  let y = 70;
+
+  ctx.beginPath();
+  ctx.moveTo(80,y);
+  ctx.lineTo(canvas.clientWidth-80,y);
+  ctx.stroke();
+
+  formats.forEach((f,i)=>{
+    let x = canvas.clientWidth/2 + (i*spacing - scrollPos);
+
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(x,y-20);
+    ctx.stroke();
+
+    ctx.textAlign="center";
+    ctx.textBaseline="bottom";
+    ctx.font="12px monospace";
+    ctx.fillText(f.name,x,y-25);
+  });
+}
+
+function drawFormats(index){
+  let y = 320;
+
+  formats.forEach((f,i)=>{
+    let x = canvas.clientWidth/2 + (i*spacing - scrollPos);
+
+    let s=4.2;
+    let w=f.w*s;
+    let h=f.h*s;
+
+    ctx.save();
+    ctx.translate(x,y);
+
+    ctx.fillStyle = i===index ? "#fff":"#eee";
+    ctx.strokeStyle="#000";
+
+    ctx.beginPath();
+    ctx.rect(-w/2,-h/2,w,h);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+  });
+}
+
+function drawBigLabel(index){
+  ctx.fillStyle="#ccc";
+  ctx.textAlign="right";
+  ctx.textBaseline="middle";
+  ctx.font="bold 100px monospace";
+
+  ctx.fillText(formats[index].name,canvas.clientWidth-80,canvas.clientHeight-100);
+}
+
+function drawTable(index){
+  table.innerHTML="";
+
+  formats.forEach((f,i)=>{
+    let div=document.createElement("div");
+    div.className="table-row"+(i===index?" active":"");
+
+    div.innerHTML=`<div>${f.name}</div><div>${f.w} × ${f.h} cm</div>`;
+
+    div.onclick=()=>{
+      targetScroll=i*spacing;
+    };
+
+    table.appendChild(div);
+  });
+}
+
+/* ---------------- UI ---------------- */
+function updateUI(index){
+  let f=formats[index];
+
+  let cmW=f.w, cmH=f.h;
+  let mmW=f.w*10, mmH=f.h*10;
+  let inchW=(f.w/2.54), inchH=(f.h/2.54);
+  let pxW=Math.round(inchW*DPI), pxH=Math.round(inchH*DPI);
+
+  cmInput.value=`cm: ${cmW} × ${cmH}`;
+  mmInput.value=`mm: ${mmW} × ${mmH}`;
+  inchInput.value=`inch: ${inchW.toFixed(2)} × ${inchH.toFixed(2)}`;
+  pixelInput.value=`px: ${pxW} × ${pxH}`;
+}
+
+/* ---------------- START ---------------- */
+draw();
+</script>
+
+</body>
+</html>
